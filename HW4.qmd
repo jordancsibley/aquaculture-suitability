@@ -1,0 +1,53 @@
+---
+title: "Homework Assignment 4"
+subtitle: "Prioritizing potential aquaculture" 
+date: last-modified
+execute: 
+  eval: true
+  message: false
+  warning: false
+format:
+  html:
+    toc: true
+editor_options: 
+---
+
+## Background 
+
+Aquaculture is a quickly growing field as a means to supply more sustainable protein optitions without the land use. This assignment aims to determine which Exclusive Economic Zones (EEZ) on the West Coast are best suited as marine aquaculture sites for oysters and [INSERT SPECIES OF CHOICE]. Sites are choosen based on a range of suitable sea surface temperatures and depth values for the particular species. 
+
+
+## Set Up 
+
+### Data 
+
+Sea surface temperature data from 2008 to 2012 generated from NOAA's 5km Daily Satellite Sea Surface Temperature Anomaly v3.1
+
+Bathymetry data comes from General Bathymetric Charts of the Oceans (GEBCO). 
+
+The designation of Exclusive Economic Zones off the West Coast comes from Marineregions.org, which outlines the boundaries of marine biogeographic areas. 
+
+```{r}
+# ---- Sea surface temperatures from 2008 to 2012
+
+
+# ---- Bathymetry data 
+
+
+# ---- EEZ 
+```
+
+
+
+
+
+
+
+
+
+
+## Citations 
+
+NOAA Coral Reef Watch. 2008-2012, updated daily. NOAA Coral Reef Watch Version 3.1 Daily 5km Satellite Regional Virtual Station Time Series Data for Southeast Florida, Mar. 12, 2013-Mar. 11, 2014. College Park, Maryland, USA: NOAA Coral Reef Watch. Data set accessed 2024-11-12 at https://coralreefwatch.noaa.gov/product/vs/data.php.
+
+GEBCO Compilation Group (2024) GEBCO 2024 Grid (doi:10.5285/1c44ce99-0a0d-5f4f-e063-7086abc0ea0f)
