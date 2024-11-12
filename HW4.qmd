@@ -52,13 +52,16 @@ Sugar Kelp \[4\]:
 -   depth: 0-30 meters below sea level
 
 ```{r}
-# ---- Sea surface temperatures from 2008 to 2012
-sst2008 <- terra::rast(here::here('data', 'average_annual_sst_2008.tif'))
-sst2009 <- terra::rast(here::here('data', 'average_annual_sst_2009.tif'))
-sst2010 <- terra::rast(here::here('data', 'average_annual_sst_2010.tif'))
-sst2011 <- terra::rast(here::here('data', 'average_annual_sst_2011.tif'))
-sst2012 <- terra::rast(here::here('data', 'average_annual_sst_2012.tif'))
+# ---- Raster stack of sea surface temperatures from 2008 to 2012
+# Set directory 
+sst_path <- here::here('data')
 
+# Create list of all SST .tif files 
+sst_files <- list.files(sst_path, 
+                        pattern = glob2rx("*average_annual_sst_*.tif$"),
+                        full.names = TRUE)
+# Create a raster stack 
+sst_rast <- rast(sst_files) 
 
 # ---- Bathymetry data 
 depth <- terra::rast(here::here('data', 'depth.tif'))
@@ -66,9 +69,6 @@ depth <- terra::rast(here::here('data', 'depth.tif'))
 # ---- EEZ 
 eez <- read_sf(here::here('data', 'wc_regions_clean.shp'))
 ```
-
-
-
 
 
 ## Citations
