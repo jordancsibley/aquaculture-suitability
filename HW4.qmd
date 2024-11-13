@@ -52,6 +52,8 @@ Sugar Kelp \[4\]:
 -   depth: 0-30 meters below sea level
 
 ```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
 # ---- Raster stack of sea surface temperatures from 2008 to 2012
 # Set directory 
 sst_path <- here::here('data')
@@ -69,6 +71,27 @@ depth <- terra::rast(here::here('data', 'depth.tif'))
 # ---- EEZ 
 eez <- read_sf(here::here('data', 'wc_regions_clean.shp'))
 ```
+
+## Coordinate Reference Systems 
+```{r}
+# Transform CRS to all match eez 
+
+ if(st_crs(sst_rast) == st_crs(eez)) {
+   print("The coordinate reference systems match")
+ } else {
+   warning("The coordinate reference systems were not a match. Transformation has now occured")
+   sst_rast <- terra::project(sst_rast, st_crs(eez)$wkt)
+ }
+
+if(st_crs(depth) == st_crs(eez)) {
+   print("The coordinate reference systems match")
+ } else {
+   warning("The coordinate reference systems were not a match. Transformation has now occured")
+   depth <- st_transform(depth, st_crs(eez))
+ }
+```
+
+
 
 
 ## Citations
