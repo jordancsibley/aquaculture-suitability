@@ -63,7 +63,7 @@ sst_files <- list.files(sst_path,
                         pattern = glob2rx("*average_annual_sst_*.tif$"),
                         full.names = TRUE)
 # Create a raster stack 
-sst_rast <- rast(sst_files) 
+sst <- rast(sst_files) 
 
 # ---- Bathymetry data 
 depth <- terra::rast(here::here('data', 'depth.tif'))
@@ -76,23 +76,101 @@ eez <- read_sf(here::here('data', 'wc_regions_clean.shp'))
 ```{r}
 # Transform CRS to all match eez 
 
- if(st_crs(sst_rast) == st_crs(eez)) {
+ if(st_crs(sst) == st_crs(eez)) {
    print("The coordinate reference systems match")
  } else {
-   warning("The coordinate reference systems were not a match. Transformation has now occured")
-   sst_rast <- terra::project(sst_rast, st_crs(eez)$wkt)
+   print("The coordinate reference systems were not a match. Transformation has now occured")
+   sst_rast <- terra::project(sst, st_crs(eez)$wkt)
  }
 
 if(st_crs(depth) == st_crs(eez)) {
    print("The coordinate reference systems match")
  } else {
-   warning("The coordinate reference systems were not a match. Transformation has now occured")
+   print("The coordinate reference systems were not a match. Transformation has now occured")
    depth <- st_transform(depth, st_crs(eez))
  }
 ```
 
 
+## Initial visualization 
+```{r}
+# View EEZ map
+tm_shape(eez) + 
+  tm_polygons(col = "rgn", 
+              palette = "viridis",
+              title = "Region") + 
+  tm_layout(legend.outside = TRUE)
+# Class
+class(eez)
+```
+The `eez` dataset is a sf dataframe that contains the geometries of the EEZ regions along the west coast of the US. The names of the regions are: Washington, Oregon, Northern California, Central California, and Southern California 
 
+```{r}
+# View depth map
+tm_shape(depth) +
+  tm_raster()
+# Class 
+class(depth)
+```
+The `depth` data is a terra raster that contains the depths of the ocean (and height of the land) of the west coast of the US. The land (anything higher than depth 0) need to be removed to be useful (potentially)
+
+```{r}
+# View sst
+tm_shape(sst) + 
+  tm_raster(palette = "Blues")
+
+# Class and dimensions
+class(sst)
+dim(sst)
+```
+The `sst` data is a terra raster that has 5 layers that gives the average sea surface temperatures of the years 2008 to 2012. I can't exactly tell what units the values are in. 
+
+
+## Finding mean sea surface temperatures from 2008-2012
+```{r}
+# Mean of raster stack 
+sst_mean <- mean(sst)
+
+# View what happened 
+tm_shape(sst_mean) + 
+  tm_raster(palette = "Blues")
+# Dimensions 
+dim(sst_mean)
+```
+
+
+## Convert SST from Kelvin to Celsius 
+```{r}
+# Convert to Celsius by subtracting 273.15 
+sst_c <- sst_mean - 273.15
+
+# View what happened
+tm_shape(sst_c) + 
+  tm_raster(palette = "Blues")
+```
+Now, the values of the raster make sense (range from 5 to 30 degrees Celcius)
+
+
+## Crop depth raster to match the extent of SST raster 
+```{r}
+# View it before crop 
+map1 <- tm_shape(depth) + 
+  tm_raster() + 
+  tm_layout(title = "Pre-crop")
+
+# Crop depth extent to that of sst
+depth_range <- terra::crop(depth, sst_c)
+
+# View what happened
+map2 <- tm_shape(depth_range) + 
+  tm_raster() + 
+  tm_layout(title = "Post-crop")
+
+tmap_arrange(map1, map2, nrow = 1)
+```
+
+
+It seems I now have a raster with only one layer that is a mean of the values of the 5 layers of the original raster stack. I need to double check this is the correct (or one way) to do this. 
 
 ## Citations
 
