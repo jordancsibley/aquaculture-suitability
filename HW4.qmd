@@ -72,7 +72,9 @@ depth <- terra::rast(here::here('data', 'depth.tif'))
 eez <- read_sf(here::here('data', 'wc_regions_clean.shp'))
 ```
 
-## Coordinate Reference Systems 
+
+## Process Data
+### Coordinate Reference Systems 
 ```{r}
 # Transform CRS to all match eez 
 
@@ -80,7 +82,7 @@ eez <- read_sf(here::here('data', 'wc_regions_clean.shp'))
    print("The coordinate reference systems match")
  } else {
    print("The coordinate reference systems were not a match. Transformation has now occured")
-   sst_rast <- terra::project(sst, st_crs(eez)$wkt)
+   sst <- terra::project(sst, st_crs(eez)$wkt)
  }
 
 if(st_crs(depth) == st_crs(eez)) {
@@ -92,7 +94,7 @@ if(st_crs(depth) == st_crs(eez)) {
 ```
 
 
-## Initial visualization 
+### Initial visualization 
 ```{r}
 # View EEZ map
 tm_shape(eez) + 
@@ -126,7 +128,7 @@ dim(sst)
 The `sst` data is a terra raster that has 5 layers that gives the average sea surface temperatures of the years 2008 to 2012. I can't exactly tell what units the values are in. 
 
 
-## Finding mean sea surface temperatures from 2008-2012
+### Finding mean sea surface temperatures from 2008-2012
 ```{r}
 # Mean of raster stack 
 sst_mean <- mean(sst)
@@ -139,7 +141,7 @@ dim(sst_mean)
 ```
 
 
-## Convert SST from Kelvin to Celsius 
+### Convert SST from Kelvin to Celsius 
 ```{r}
 # Convert to Celsius by subtracting 273.15 
 sst_c <- sst_mean - 273.15
@@ -148,10 +150,10 @@ sst_c <- sst_mean - 273.15
 tm_shape(sst_c) + 
   tm_raster(palette = "Blues")
 ```
-Now, the values of the raster make sense (range from 5 to 30 degrees Celcius)
+Now, the values of the raster make sense (range from 5 to 30 degrees Celsius)
 
 
-## Crop depth raster to match the extent of SST raster 
+### Crop depth raster to match the extent of SST raster 
 ```{r}
 # View it before crop 
 map1 <- tm_shape(depth) + 
@@ -169,8 +171,39 @@ map2 <- tm_shape(depth_range) +
 tmap_arrange(map1, map2, nrow = 1)
 ```
 
+### Resolution 
+```{r}
+# Check if resolution of depth and sst match 
+res(depth_range) == res(sst_c)
 
-It seems I now have a raster with only one layer that is a mean of the values of the 5 layers of the original raster stack. I need to double check this is the correct (or one way) to do this. 
+# Change resolution of depth to match sst using nearest neighbor approach
+depth_rs <- terra::resample(depth_range, y = sst_c, method = "near")
+
+# View re sampled depth range 
+tm_shape(depth_rs) + 
+  tm_raster()
+
+# Recheck that resolution now match
+res(depth_rs) == res(sst_c)
+```
+
+### See if dimensions of data match before merging them 
+
+**Make this a more advanced test**
+```{r}
+# Resolution 
+res(depth_rs) == res(sst_c)
+
+# Extent 
+ext(depth_rs) == ext(sst_c)
+
+# CRS 
+st_crs(depth_rs) == st_crs(sst_c)
+```
+
+## Find Suitable locations 
+
+
 
 ## Citations
 
