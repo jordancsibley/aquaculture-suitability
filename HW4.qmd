@@ -29,6 +29,7 @@ library(sf)
 library(terra)
 library(stars)
 library(tmap)
+library(raster)
 ```
 
 ### Data
@@ -146,6 +147,9 @@ dim(sst_mean)
 # Convert to Celsius by subtracting 273.15 
 sst_c <- sst_mean - 273.15
 
+# Rename layer name 
+names(sst_c) <- "temp_c"
+
 # View what happened
 tm_shape(sst_c) + 
   tm_raster(palette = "Blues")
@@ -199,6 +203,17 @@ ext(depth_rs) == ext(sst_c)
 
 # CRS 
 st_crs(depth_rs) == st_crs(sst_c)
+
+# Create raster stack of temp and depth
+temp_depth <- c(depth_rs, sst_c)
+
+depthmap <- tm_shape(temp_depth[[1]]) +
+  tm_raster() 
+  
+tempmap<- tm_shape(temp_depth[[2]]) +
+  tm_raster(palette = c("blue", "lightblue", "yellow", "orange", "red"))
+
+tmap_arrange(depthmap, tempmap, nrow=1)
 ```
 
 ## Find Suitable locations 
