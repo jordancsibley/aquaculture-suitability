@@ -117,6 +117,8 @@ class(depth)
 ```
 The `depth` data is a terra raster that contains the depths of the ocean (and height of the land) of the west coast of the US. The land (anything higher than depth 0) need to be removed to be useful (potentially)
 
+
+
 ```{r}
 # View sst
 tm_shape(sst) + 
@@ -127,6 +129,15 @@ class(sst)
 dim(sst)
 ```
 The `sst` data is a terra raster that has 5 layers that gives the average sea surface temperatures of the years 2008 to 2012. I can't exactly tell what units the values are in. 
+
+### Remove land from depth 
+```{r}
+# Any value that is greater than depth(elevation) = 0 turns to NA
+depth[depth > 0] <- NA
+
+tm_shape(depth) +
+  tm_raster()
+```
 
 
 ### Finding mean sea surface temperatures from 2008-2012
@@ -205,19 +216,71 @@ ext(depth_rs) == ext(sst_c)
 st_crs(depth_rs) == st_crs(sst_c)
 
 # Create raster stack of temp and depth
-temp_depth <- c(depth_rs, sst_c)
-
-depthmap <- tm_shape(temp_depth[[1]]) +
-  tm_raster() 
-  
-tempmap<- tm_shape(temp_depth[[2]]) +
-  tm_raster(palette = c("blue", "lightblue", "yellow", "orange", "red"))
-
-tmap_arrange(depthmap, tempmap, nrow=1)
+# depth_temp <- c(depth_rs, sst_c)
+# 
+# depthmap <- tm_shape(depth_temp[[1]]) +
+#   tm_raster() 
+#   
+# tempmap<- tm_shape(depth_temp[[2]]) +
+#   tm_raster(palette = c("blue", "lightblue", "yellow", "orange", "red"))
+# 
+# tmap_arrange(depthmap, tempmap, nrow=1)
 ```
 
 ## Find Suitable locations 
 
+### Reclassify raster for suitable oyster conditions 
+
+Set the following values to `1`
+
+- Depth: 0-70 meters
+- Sea surface temperature: 11-30°C
+
+Any other value set to `0`
+
+```{r}
+# Create reclasification matrix for depth 
+rcl_depth <- matrix(c(0, -70, 1, # values 0 to 70 = 1
+                      -70, -Inf, 0), # values 70 to Inf = 0
+                    ncol = 3, byrow = TRUE)
+
+# Create reclasification matrix for temp 
+rcl_sst <- matrix(c(-Inf,11, 0,# values from -Inf to 11 = 0
+                      11, 30, 1, # values 11 to 30 = 1
+                      30, Inf, 0), # values 30 to Inf = 0
+                    ncol = 3, byrow = TRUE)
+
+# Reclassify the raster for oyster specifications 
+depth_oyster <- terra::classify(depth_rs, rcl = rcl_depth)
+
+sst_oyster <- terra::classify(sst_c, rcl = rcl_sst)
+
+# Create raster stack of temp and depth
+depth_temp_oyster <- c(depth_oyster, sst_oyster)
+
+# Visualize reclassification 
+depthmap <- tm_shape(depth_temp_oyster[[1]]) +
+  tm_raster() 
+  
+tempmap<- tm_shape(depth_temp_oyster[[2]]) +
+  tm_raster()
+
+tmap_arrange(depthmap, tempmap, nrow=1)
+
+```
+
+
+Lets investigate if the land can be removed 
+```{r}
+# turn anything that is greater than equal to 0 for depth NA 
+
+ocean <- depth_rs
+
+ocean[ocean >= 0] <- NA
+plot(ocean)
+
+plot(sst_c)
+```
 
 
 ## Citations
