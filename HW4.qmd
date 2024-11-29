@@ -73,29 +73,19 @@ depth <- terra::rast(here::here('data', 'depth.tif'))
 eez <- read_sf(here::here('data', 'wc_regions_clean.shp'))
 ```
 
-
 ## Process Data
-### Coordinate Reference Systems 
+
+### Coordinate Reference Systems
+
 ```{r}
-# Transform CRS to all match eez 
-
- if(st_crs(sst) == st_crs(eez)) {
-   print("The coordinate reference systems match")
- } else {
-   print("The coordinate reference systems were not a match. Transformation has now occured")
-   sst <- terra::project(sst, st_crs(eez)$wkt)
- }
-
-if(st_crs(depth) == st_crs(eez)) {
-   print("The coordinate reference systems match")
- } else {
-   print("The coordinate reference systems were not a match. Transformation has now occured")
-   depth <- st_transform(depth, st_crs(eez))
- }
+# Reproject CRS to all match EPSG: 32610
+sst<- terra::project(sst, "EPSG: 32610")
+depth <- terra::project(depth, "EPSG: 32610")
+eez <- st_transform(eez, "EPSG: 32610")
 ```
 
+### Initial visualization
 
-### Initial visualization 
 ```{r}
 # View EEZ map
 tm_shape(eez) + 
@@ -106,7 +96,8 @@ tm_shape(eez) +
 # Class
 class(eez)
 ```
-The `eez` dataset is a sf dataframe that contains the geometries of the EEZ regions along the west coast of the US. The names of the regions are: Washington, Oregon, Northern California, Central California, and Southern California 
+
+The `eez` dataset is a sf dataframe that contains the geometries of the EEZ regions along the west coast of the US. The names of the regions are: Washington, Oregon, Northern California, Central California, and Southern California
 
 ```{r}
 # View depth map
@@ -115,9 +106,8 @@ tm_shape(depth) +
 # Class 
 class(depth)
 ```
+
 The `depth` data is a terra raster that contains the depths of the ocean (and height of the land) of the west coast of the US. The land (anything higher than depth 0) need to be removed to be useful (potentially)
-
-
 
 ```{r}
 # View sst
@@ -128,19 +118,11 @@ tm_shape(sst) +
 class(sst)
 dim(sst)
 ```
-The `sst` data is a terra raster that has 5 layers that gives the average sea surface temperatures of the years 2008 to 2012. I can't exactly tell what units the values are in. 
 
-### Remove land from depth 
-```{r}
-# Any value that is greater than depth(elevation) = 0 turns to NA
-depth[depth > 0] <- NA
-
-tm_shape(depth) +
-  tm_raster()
-```
-
+The `sst` data is a terra raster that has 5 layers that gives the average sea surface temperatures of the years 2008 to 2012. I can't exactly tell what units the values are in.
 
 ### Finding mean sea surface temperatures from 2008-2012
+
 ```{r}
 # Mean of raster stack 
 sst_mean <- mean(sst)
@@ -152,8 +134,8 @@ tm_shape(sst_mean) +
 dim(sst_mean)
 ```
 
+### Convert SST from Kelvin to Celsius
 
-### Convert SST from Kelvin to Celsius 
 ```{r}
 # Convert to Celsius by subtracting 273.15 
 sst_c <- sst_mean - 273.15
@@ -165,10 +147,11 @@ names(sst_c) <- "temp_c"
 tm_shape(sst_c) + 
   tm_raster(palette = "Blues")
 ```
+
 Now, the values of the raster make sense (range from 5 to 30 degrees Celsius)
 
+### Crop depth raster to match the extent of SST raster
 
-### Crop depth raster to match the extent of SST raster 
 ```{r}
 # View it before crop 
 map1 <- tm_shape(depth) + 
@@ -186,7 +169,8 @@ map2 <- tm_shape(depth_range) +
 tmap_arrange(map1, map2, nrow = 1)
 ```
 
-### Resolution 
+### Resolution
+
 ```{r}
 # Check if resolution of depth and sst match 
 res(depth_range) == res(sst_c)
@@ -202,9 +186,10 @@ tm_shape(depth_rs) +
 res(depth_rs) == res(sst_c)
 ```
 
-### See if dimensions of data match before merging them 
+### See if dimensions of data match before merging them
 
 **Make this a more advanced test**
+
 ```{r}
 # Resolution 
 res(depth_rs) == res(sst_c)
@@ -227,21 +212,22 @@ st_crs(depth_rs) == st_crs(sst_c)
 # tmap_arrange(depthmap, tempmap, nrow=1)
 ```
 
-## Find Suitable locations 
+## Find Suitable locations
 
-### Reclassify raster for suitable oyster conditions 
+### Reclassify raster for suitable oyster conditions
 
 Set the following values to `1`
 
-- Depth: 0-70 meters
-- Sea surface temperature: 11-30°C
+-   Depth: 0-70 meters
+-   Sea surface temperature: 11-30°C
 
 Any other value set to `0`
 
 ```{r}
 # Create reclasification matrix for depth 
-rcl_depth <- matrix(c(0, -70, 1, # values 0 to 70 = 1
-                      -70, -Inf, 0), # values 70 to Inf = 0
+rcl_depth <- matrix(c(-Inf, -70, 0,  # values -Inf to -70 = 0
+                      -70, 0, 1,     # values -70 to 0 = 1
+                      0, Inf, 0),    # values 0 to Inf = 0
                     ncol = 3, byrow = TRUE)
 
 # Create reclasification matrix for temp 
@@ -255,33 +241,73 @@ depth_oyster <- terra::classify(depth_rs, rcl = rcl_depth)
 
 sst_oyster <- terra::classify(sst_c, rcl = rcl_sst)
 
-# Create raster stack of temp and depth
-depth_temp_oyster <- c(depth_oyster, sst_oyster)
+# Remove intermediate data names 
+#rm(sst, sst_mean, sst_c, depth, depth_range, depth_rs)
+```
 
-# Visualize reclassification 
-depthmap <- tm_shape(depth_temp_oyster[[1]]) +
-  tm_raster() 
-  
-tempmap<- tm_shape(depth_temp_oyster[[2]]) +
+
+Creating raster with lapp 
+```{r}
+# Create raster stack 
+oyster_stack <- c(depth_oyster, sst_oyster)
+
+# suitable_area_fun <- function(depth, sst) {
+#   depth * sst
+#} # Can put this function directly into lapp
+
+
+# Apply multiplication 
+suitable_oyster <- terra::lapp(oyster_stack[[c(1,2)]], fun = function(depth, sst) depth * sst)
+
+tm_shape(suitable_oyster) + 
+  tm_raster(palette = c("lightyellow", "lightgreen")) +
+  tm_layout(legend.show = FALSE)
+```
+
+## Determine the most suitable EEZ
+
+-   select suitable cells within West Coast EEZs
+-   find area of grid cells
+-   find the total suitable area within each EEZ
+-   hint: it might be helpful to rasterize the EEZ data
+
+
+
+
+
+```{r}
+
+# Step 2: Rasterize the eez dataframe using the 'rgn' column
+eez_rast <- terra::rasterize(eez, suitable_oyster, field = "rgn")
+
+# Step 3: Mask the reclassified raster by the eez zones (this will keep only the suitable areas)
+#suitable_mask <- suitable_oyster * eez_rast
+
+# Set 0 values to NA 
+#suitable_mask[suitable_mask == 0] <- NA
+
+tm_shape(eez_rast) +
   tm_raster()
 
-tmap_arrange(depthmap, tempmap, nrow=1)
+# Calculate area of grid cells of eez? 
+eez_area <- cellSize(eez_rast, unit = "m")
+
+
+
+
+# Step 4: Calculate the total area for each zone using zonal statistics
+# zone_area <- terra::zonal(masked_rast, eez_rast, fun = "sum", na.rm = TRUE)
+
+# Step 5: Convert cell counts to area (area of one raster cell)
+#cell_area <- terra::res(suitable_area_rast)[1] * terra::res(suitable_area_rast)[2]
+
+# Step 6: Calculate total area (sum of suitable areas * area of one cell)
+#zone_area$total_area <- zone_area$sum * cell_area
+
+# Print the final result
+#print(zone_area)
 
 ```
-
-
-Lets investigate if the land can be removed 
-```{r}
-# turn anything that is greater than equal to 0 for depth NA 
-
-ocean <- depth_rs
-
-ocean[ocean >= 0] <- NA
-plot(ocean)
-
-plot(sst_c)
-```
-
 
 ## Citations
 
