@@ -30,6 +30,7 @@ library(terra)
 library(stars)
 library(tmap)
 library(raster)
+library(spData)
 ```
 
 ### Data
@@ -71,6 +72,17 @@ depth <- terra::rast(here::here('data', 'depth.tif'))
 
 # ---- EEZ 
 eez <- read_sf(here::here('data', 'wc_regions_clean.shp'))
+
+# ---- West coast states  
+# load US states
+us_states <- spData::us_states
+
+# filter to ca, or, wa
+west_coast_states <- us_states %>% 
+  filter(NAME %in% c("California", "Oregon", "Washington"))
+
+# NEED TO LEARN HOW TO INCREASE THE EXTENT OF THIS 
+
 ```
 
 ## Process Data
@@ -82,6 +94,7 @@ eez <- read_sf(here::here('data', 'wc_regions_clean.shp'))
 sst<- terra::project(sst, "EPSG: 32610")
 depth <- terra::project(depth, "EPSG: 32610")
 eez <- st_transform(eez, "EPSG: 32610")
+west_coast_states <- st_transform(west_coast_states, "EPSG: 32610")
 ```
 
 ### Initial visualization
@@ -223,6 +236,7 @@ Set the following values to `1`
 
 Any other value set to `0`
 
+
 ```{r}
 # Create reclasification matrix for depth 
 rcl_depth <- matrix(c(-Inf, -70, 0,  # values -Inf to -70 = 0
@@ -257,11 +271,15 @@ oyster_stack <- c(depth_oyster, sst_oyster)
 
 
 # Apply multiplication 
-suitable_oyster <- terra::lapp(oyster_stack[[c(1,2)]], fun = function(depth, sst) depth * sst)
+suitable_oyster <- terra::lapp(oyster_stack, fun = function(depth, sst) depth * sst)
 
 tm_shape(suitable_oyster) + 
   tm_raster(palette = c("lightyellow", "lightgreen")) +
   tm_layout(legend.show = FALSE)
+
+
+# Turn 0 values into NA 
+suitable_oyster[suitable_oyster == 0] <- NA #I might not need to do this because if I leave the zero values when I multiple it by eez then I can turn the zero into NA values 
 ```
 
 ## Determine the most suitable EEZ
@@ -273,41 +291,56 @@ tm_shape(suitable_oyster) +
 
 
 
+i used cell size on a raster that was cropped to the extent of EEZs and had a 1 in all places suitable for oysters and NA in all other places. 
+then i multiplied the output of that by the suitable oysters raster to get a new raster that had cell size in each cell that was suitable for oysters. then thats the one i used in zonal!
+
+# rasterize EEZs by region
+region_rast <- rasterize(wc_eez, depth, field = "rgn")
+
+# find area of cells in each region
+areas <- expanse(oyster_suitability, unit = "km", zones = region_rast)
+
+# join area values to each EEZ
+wc_eez_merge <- merge(wc_eez, areas, 
+                      by.x = "rgn", 
+                      by.y = "zone",
+                      all.x = TRUE) %>% 
+  mutate(p_area = (area/area_km2) * 100) # find the percentage suitable area in each region
 
 
 ```{r}
-
 # Step 2: Rasterize the eez dataframe using the 'rgn' column
 eez_rast <- terra::rasterize(eez, suitable_oyster, field = "rgn")
-
-# Step 3: Mask the reclassified raster by the eez zones (this will keep only the suitable areas)
-#suitable_mask <- suitable_oyster * eez_rast
-
-# Set 0 values to NA 
-#suitable_mask[suitable_mask == 0] <- NA
 
 tm_shape(eez_rast) +
   tm_raster()
 
-# Calculate area of grid cells of eez? 
-eez_area <- cellSize(eez_rast, unit = "m")
+# Create dataframe that displays suitable area of each zone
+suitable_area <- terra::expanse(suitable_oyster, unit = "km", zones = eez_rast)
 
+# rename columns
+suitable_area <- suitable_area %>% 
+  rename("suitable_area_km2" = "area",
+         "rgn" = "zone")
 
-
-
-# Step 4: Calculate the total area for each zone using zonal statistics
-# zone_area <- terra::zonal(masked_rast, eez_rast, fun = "sum", na.rm = TRUE)
-
-# Step 5: Convert cell counts to area (area of one raster cell)
-#cell_area <- terra::res(suitable_area_rast)[1] * terra::res(suitable_area_rast)[2]
-
-# Step 6: Calculate total area (sum of suitable areas * area of one cell)
-#zone_area$total_area <- zone_area$sum * cell_area
-
-# Print the final result
-#print(zone_area)
+# Calculate percent of each zone that contains suitable area for oyster aquaculture 
+eez_oyster <- eez %>% 
+  left_join(suitable_area, by= "rgn") %>% 
+  #select(-layer, -rgn_key, -rgn_id) %>% figure out how to remove these columns
+  mutate(zone_pct = suitable_area_km2 / area_km2 * 100)
 
 ```
+
+Could create a table with this info 
+
+Then make a nicer looking map that includes state outlines from spdata
+```{r}
+tm_shape(west_coast_states) +
+  tm_borders() + 
+  tm_shape(eez_rast) +
+  tm_raster()
+```
+
 
 ## Citations
 
