@@ -14,7 +14,7 @@ editor_options:
 
 ## Background
 
-Aquaculture is a quickly growing field as a means to supply more sustainable protein optitions without the land use. This assignment aims to determine which Exclusive Economic Zones (EEZ) on the West Coast are best suited as marine aquaculture sites for oysters and sugar kelp (Saccharina latissima). Sites are choosen based on a range of suitable sea surface temperatures and depth values for the particular species.
+Aquaculture is a quickly growing field as a means to supply more sustainable protein options without the land use. This assignment aims to determine which Exclusive Economic Zones (EEZ) on the West Coast are best suited as marine aquaculture sites for oysters and sugar kelp (Saccharina latissima). Sites are choosen based on a range of suitable sea surface temperatures and depth values for the particular species.
 
 ## Set Up
 
@@ -81,7 +81,7 @@ us_states <- spData::us_states
 west_coast_states <- us_states %>% 
   filter(NAME %in% c("California", "Oregon", "Washington"))
 
-# NEED TO LEARN HOW TO INCREASE THE EXTENT OF THIS 
+
 
 ```
 
@@ -91,10 +91,16 @@ west_coast_states <- us_states %>%
 
 ```{r}
 # Reproject CRS to all match EPSG: 32610
-sst<- terra::project(sst, "EPSG: 32610")
-depth <- terra::project(depth, "EPSG: 32610")
-eez <- st_transform(eez, "EPSG: 32610")
-west_coast_states <- st_transform(west_coast_states, "EPSG: 32610")
+# sst<- terra::project(sst, "EPSG: 32610")
+# depth <- terra::project(depth, "EPSG: 32610")
+# eez <- st_transform(eez, "EPSG: 32610")
+# west_coast_states <- st_transform(west_coast_states, "EPSG: 32610")
+
+
+# Reproject CRS to all match sst
+depth <- terra::project(depth, crs(sst))
+eez <- st_transform(eez, crs(sst))
+west_coast_states <- st_transform(west_coast_states, crs(sst))
 ```
 
 ### Initial visualization
@@ -213,16 +219,6 @@ ext(depth_rs) == ext(sst_c)
 # CRS 
 st_crs(depth_rs) == st_crs(sst_c)
 
-# Create raster stack of temp and depth
-# depth_temp <- c(depth_rs, sst_c)
-# 
-# depthmap <- tm_shape(depth_temp[[1]]) +
-#   tm_raster() 
-#   
-# tempmap<- tm_shape(depth_temp[[2]]) +
-#   tm_raster(palette = c("blue", "lightblue", "yellow", "orange", "red"))
-# 
-# tmap_arrange(depthmap, tempmap, nrow=1)
 ```
 
 ## Find Suitable locations
@@ -277,7 +273,6 @@ tm_shape(suitable_oyster) +
   tm_raster(palette = c("lightyellow", "lightgreen")) +
   tm_layout(legend.show = FALSE)
 
-
 # Turn 0 values into NA 
 suitable_oyster[suitable_oyster == 0] <- NA #I might not need to do this because if I leave the zero values when I multiple it by eez then I can turn the zero into NA values 
 ```
@@ -288,24 +283,6 @@ suitable_oyster[suitable_oyster == 0] <- NA #I might not need to do this because
 -   find area of grid cells
 -   find the total suitable area within each EEZ
 -   hint: it might be helpful to rasterize the EEZ data
-
-
-
-i used cell size on a raster that was cropped to the extent of EEZs and had a 1 in all places suitable for oysters and NA in all other places. 
-then i multiplied the output of that by the suitable oysters raster to get a new raster that had cell size in each cell that was suitable for oysters. then thats the one i used in zonal!
-
-# rasterize EEZs by region
-region_rast <- rasterize(wc_eez, depth, field = "rgn")
-
-# find area of cells in each region
-areas <- expanse(oyster_suitability, unit = "km", zones = region_rast)
-
-# join area values to each EEZ
-wc_eez_merge <- merge(wc_eez, areas, 
-                      by.x = "rgn", 
-                      by.y = "zone",
-                      all.x = TRUE) %>% 
-  mutate(p_area = (area/area_km2) * 100) # find the percentage suitable area in each region
 
 
 ```{r}
@@ -333,13 +310,46 @@ eez_oyster <- eez %>%
 
 Could create a table with this info 
 
-Then make a nicer looking map that includes state outlines from spdata
+
 ```{r}
-tm_shape(west_coast_states) +
-  tm_borders() + 
-  tm_shape(eez_rast) +
-  tm_raster()
+# Create bounding box of extents  
+bbox_depth <- as.matrix(terra::ext(depth_range))
+
+
+# Create map 
+tm_shape(depth_range) + # depth raster to show borders 
+  tm_raster(palette = "-GnBu", midpoint = NA, alpha = 0.4, legend.show = FALSE) +
+tm_shape(west_coast_states, bbox = bbox_depth) + # state outlines 
+  tm_borders(alpha = 0.5) +
+tm_shape(eez_oyster) +  # eez zones 
+  tm_polygons(col = "zone_pct",
+              palette = "Oranges", 
+              alpha = 0.5,
+              title = "% of suitable area \nper EEZ (km2)") + 
+  tm_credits("Oregon", position = c(0.25, 0.7), size = 0.6) +
+  tm_credits("Washington", position = c(0.26, 0.82), size = 0.6) +
+  
+tm_shape(suitable_oyster) + # suitable oyster area
+  tm_raster(palette = "firebrick", legend.show = FALSE) +
+  tm_add_legend(type = "fill", 
+                title = expression(paste("Total suitable area (", "km"^"2", ")")), 
+                col = "firebrick", 
+                labels = " ") +
+  
+  tm_layout(legend.outside = TRUE,
+            fontfamily = "serif",
+            main.title = "Oyster Aquaculture Suitable Sites") + 
+  
+  tm_scale_bar(position = c(0.06, 0.04)) + # scale bar and compass 
+  tm_compass(position = c(0.03, 0.12),
+             size = 1.5) 
 ```
+
+
+
+- Change color palette of the zones 
+- Label each zone instead of legend 
+
 
 
 ## Citations
