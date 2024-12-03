@@ -24,6 +24,7 @@ Aquaculture is a quickly growing field as a means to supply more sustainable pro
 #| code-fold: true
 #| code-summary: "Show the code"
 library(tidyverse)
+library(dplyr)
 library(here)
 library(sf)
 library(terra)
@@ -31,6 +32,8 @@ library(stars)
 library(tmap)
 library(raster)
 library(spData)
+library(kableExtra)
+library(testthat)
 ```
 
 ### Data
@@ -39,7 +42,7 @@ Sea surface temperature data from 2008 to 2012 generated from NOAA's 5km Daily S
 
 Bathymetry data comes from General Bathymetric Charts of the Oceans (GEBCO). \[2\]
 
-The designation of Exclusive Economic Zones off the West Coast comes from Marineregions.org, which outlines the boundaries of marine biogeographic areas. \[3\]
+The designation of Exclusive Economic Zones off the West Coast comes from Marineregions.org, which outlines the boundaries of marine biogeographic areas. \[3\] The names of the regions are: Washington, Oregon, Northern California, Central California, and Southern California.
 
 #### SST and depth requirements
 
@@ -80,98 +83,45 @@ us_states <- spData::us_states
 # filter to ca, or, wa
 west_coast_states <- us_states %>% 
   filter(NAME %in% c("California", "Oregon", "Washington"))
-
-
-
 ```
 
 ## Process Data
 
-### Coordinate Reference Systems
+In order to find which area is suitable for oyster production in terms of sea surface temperature and depth, the data needs to be processed. The following code matches the coordinate reference systems (CRS) of all the spatial data, finds the mean sea surface over the time period, and converts the temperature from Kelvin to Celsius. Then, the resolution and extents of the raster data are alligned so that the depth and temperature data can be combined. 
+
+#### CRS and Temp
 
 ```{r}
-# Reproject CRS to all match EPSG: 32610
-# sst<- terra::project(sst, "EPSG: 32610")
-# depth <- terra::project(depth, "EPSG: 32610")
-# eez <- st_transform(eez, "EPSG: 32610")
-# west_coast_states <- st_transform(west_coast_states, "EPSG: 32610")
-
-
+#| code-fold: true
+#| code-summary: "Show the code"
+# ---- Coordinate Reference Systems
 # Reproject CRS to all match sst
 depth <- terra::project(depth, crs(sst))
 eez <- st_transform(eez, crs(sst))
 west_coast_states <- st_transform(west_coast_states, crs(sst))
-```
 
-### Initial visualization
-
-```{r}
-# View EEZ map
-tm_shape(eez) + 
-  tm_polygons(col = "rgn", 
-              palette = "viridis",
-              title = "Region") + 
-  tm_layout(legend.outside = TRUE)
-# Class
-class(eez)
-```
-
-The `eez` dataset is a sf dataframe that contains the geometries of the EEZ regions along the west coast of the US. The names of the regions are: Washington, Oregon, Northern California, Central California, and Southern California
-
-```{r}
-# View depth map
-tm_shape(depth) +
-  tm_raster()
-# Class 
-class(depth)
-```
-
-The `depth` data is a terra raster that contains the depths of the ocean (and height of the land) of the west coast of the US. The land (anything higher than depth 0) need to be removed to be useful (potentially)
-
-```{r}
-# View sst
-tm_shape(sst) + 
-  tm_raster(palette = "Blues")
-
-# Class and dimensions
-class(sst)
-dim(sst)
-```
-
-The `sst` data is a terra raster that has 5 layers that gives the average sea surface temperatures of the years 2008 to 2012. I can't exactly tell what units the values are in.
-
-### Finding mean sea surface temperatures from 2008-2012
-
-```{r}
+#---- Finding mean sea surface temperatures from 2008-2012
 # Mean of raster stack 
 sst_mean <- mean(sst)
 
-# View what happened 
-tm_shape(sst_mean) + 
-  tm_raster(palette = "Blues")
-# Dimensions 
-dim(sst_mean)
-```
-
-### Convert SST from Kelvin to Celsius
-
-```{r}
+# ---- Convert SST from Kelvin to Celsius
 # Convert to Celsius by subtracting 273.15 
 sst_c <- sst_mean - 273.15
 
 # Rename layer name 
 names(sst_c) <- "temp_c"
-
-# View what happened
-tm_shape(sst_c) + 
-  tm_raster(palette = "Blues")
 ```
 
-Now, the values of the raster make sense (range from 5 to 30 degrees Celsius)
 
-### Crop depth raster to match the extent of SST raster
+#### Extent and Resolution
 
 ```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+#| output: false
+#| quiet: true
+# ---- Crop depth raster to match the extent of SST raster
+
 # View it before crop 
 map1 <- tm_shape(depth) + 
   tm_raster() + 
@@ -186,44 +136,32 @@ map2 <- tm_shape(depth_range) +
   tm_layout(title = "Post-crop")
 
 tmap_arrange(map1, map2, nrow = 1)
-```
 
-### Resolution
-
-```{r}
+# ---- Resolution 
 # Check if resolution of depth and sst match 
 res(depth_range) == res(sst_c)
 
 # Change resolution of depth to match sst using nearest neighbor approach
 depth_rs <- terra::resample(depth_range, y = sst_c, method = "near")
-
-# View re sampled depth range 
-tm_shape(depth_rs) + 
-  tm_raster()
-
-# Recheck that resolution now match
-res(depth_rs) == res(sst_c)
 ```
 
-### See if dimensions of data match before merging them
-
-**Make this a more advanced test**
+Now let's confirm the dimensions of data match before merging them
 
 ```{r}
-# Resolution 
-res(depth_rs) == res(sst_c)
-
-# Extent 
-ext(depth_rs) == ext(sst_c)
-
-# CRS 
-st_crs(depth_rs) == st_crs(sst_c)
-
+# Test to check rasters are compatible for stacking
+test_that("Resolution, extent, and CRS are the same", {
+  # Check resolution
+  expect_equal(res(depth_rs), res(sst_c), label = "Resolution does not match")
+  # Check extent
+  expect_equal(ext(depth_rs), ext(sst_c), label = "Extent does not match")
+  # Check CRS
+  expect_equal(st_crs(depth_rs), st_crs(sst_c), label = "CRS does not match")
+})
 ```
 
-## Find Suitable locations
+## Find Suitable locations for oyster conditions
 
-### Reclassify raster for suitable oyster conditions
+In order to find cells within the raster that are suitable for oyster conditions, I will reclassify the raster as the following:
 
 Set the following values to `1`
 
@@ -232,8 +170,10 @@ Set the following values to `1`
 
 Any other value set to `0`
 
-
 ```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+# ---- Reclassification 
 # Create reclasification matrix for depth 
 rcl_depth <- matrix(c(-Inf, -70, 0,  # values -Inf to -70 = 0
                       -70, 0, 1,     # values -70 to 0 = 1
@@ -248,54 +188,37 @@ rcl_sst <- matrix(c(-Inf,11, 0,# values from -Inf to 11 = 0
 
 # Reclassify the raster for oyster specifications 
 depth_oyster <- terra::classify(depth_rs, rcl = rcl_depth)
-
 sst_oyster <- terra::classify(sst_c, rcl = rcl_sst)
 
-# Remove intermediate data names 
-#rm(sst, sst_mean, sst_c, depth, depth_range, depth_rs)
-```
-
-
-Creating raster with lapp 
-```{r}
+# ---- Raster stack 
 # Create raster stack 
 oyster_stack <- c(depth_oyster, sst_oyster)
-
-# suitable_area_fun <- function(depth, sst) {
-#   depth * sst
-#} # Can put this function directly into lapp
-
 
 # Apply multiplication 
 suitable_oyster <- terra::lapp(oyster_stack, fun = function(depth, sst) depth * sst)
 
-tm_shape(suitable_oyster) + 
-  tm_raster(palette = c("lightyellow", "lightgreen")) +
-  tm_layout(legend.show = FALSE)
-
 # Turn 0 values into NA 
-suitable_oyster[suitable_oyster == 0] <- NA #I might not need to do this because if I leave the zero values when I multiple it by eez then I can turn the zero into NA values 
+suitable_oyster[suitable_oyster == 0] <- NA
 ```
 
 ## Determine the most suitable EEZ
 
--   select suitable cells within West Coast EEZs
--   find area of grid cells
--   find the total suitable area within each EEZ
--   hint: it might be helpful to rasterize the EEZ data
+With the suitable areas for oyster aquaculture identified, the next step is to determine how much of these areas fall within each Exclusive Economic Zone (EEZ) along the west coast. Building on the previous analyses, I will create a map and a table to visualize and summarize these findings.
 
 
 ```{r}
-# Step 2: Rasterize the eez dataframe using the 'rgn' column
-eez_rast <- terra::rasterize(eez, suitable_oyster, field = "rgn")
+#| code-fold: true
+#| code-summary: "Show the code"
 
-tm_shape(eez_rast) +
-  tm_raster()
+# ---- Calculate % of suitable area per zone 
+
+# Rasterize the eez dataframe using the 'rgn' column
+eez_rast <- terra::rasterize(eez, suitable_oyster, field = "rgn")
 
 # Create dataframe that displays suitable area of each zone
 suitable_area <- terra::expanse(suitable_oyster, unit = "km", zones = eez_rast)
 
-# rename columns
+# Rename columns
 suitable_area <- suitable_area %>% 
   rename("suitable_area_km2" = "area",
          "rgn" = "zone")
@@ -303,53 +226,167 @@ suitable_area <- suitable_area %>%
 # Calculate percent of each zone that contains suitable area for oyster aquaculture 
 eez_oyster <- eez %>% 
   left_join(suitable_area, by= "rgn") %>% 
-  #select(-layer, -rgn_key, -rgn_id) %>% figure out how to remove these columns
   mutate(zone_pct = suitable_area_km2 / area_km2 * 100)
 
-```
+# ---- Base map 
 
-Could create a table with this info 
-
-
-```{r}
 # Create bounding box of extents  
 bbox_depth <- as.matrix(terra::ext(depth_range))
 
-
-# Create map 
-tm_shape(depth_range) + # depth raster to show borders 
+basemap <- tm_shape(depth_range) + # depth raster to show borders 
   tm_raster(palette = "-GnBu", midpoint = NA, alpha = 0.4, legend.show = FALSE) +
 tm_shape(west_coast_states, bbox = bbox_depth) + # state outlines 
-  tm_borders(alpha = 0.5) +
-tm_shape(eez_oyster) +  # eez zones 
+  tm_borders(alpha = 0.5) + 
+  
+  # labels for eez zones 
+  tm_credits("Washington", position = c(0.26, 0.82), size = 0.6) +
+  tm_credits("Oregon", position = c(0.25, 0.68), size = 0.6) +
+  tm_credits("Northern\nCalifornia", position = c(0.25, 0.49), size = 0.6) +
+  tm_credits("Central\nCalifornia", position = c(0.38, 0.3), size = 0.6) +
+  tm_credits("Southern\nCalifornia", position = c(0.58, 0.11), size = 0.6) +
+  
+  tm_scale_bar(position = c(0.06, 0.04)) + # scale bar and compass 
+  tm_compass(position = c(0.03, 0.1), size = 1.5) 
+
+
+# ---- Map for oyster aquaculture 
+basemap + tm_shape(eez_oyster) +  # eez zones 
   tm_polygons(col = "zone_pct",
               palette = "Oranges", 
               alpha = 0.5,
               title = "% of suitable area \nper EEZ (km2)") + 
-  tm_credits("Oregon", position = c(0.25, 0.7), size = 0.6) +
-  tm_credits("Washington", position = c(0.26, 0.82), size = 0.6) +
-  
-tm_shape(suitable_oyster) + # suitable oyster area
+  tm_shape(suitable_oyster) + # suitable oyster area
   tm_raster(palette = "firebrick", legend.show = FALSE) +
   tm_add_legend(type = "fill", 
-                title = expression(paste("Total suitable area (", "km"^"2", ")")), 
+                title = "Total suitable area (km^2)", 
                 col = "firebrick", 
                 labels = " ") +
   
   tm_layout(legend.outside = TRUE,
             fontfamily = "serif",
-            main.title = "Oyster Aquaculture Suitable Sites") + 
+            main.title = "Oyster Aquaculture Suitable Sites")
+
+# ---- Table 
+# Filter data for table 
+eez_table <- eez_oyster %>% 
+  st_drop_geometry() %>% 
+  dplyr::select(rgn, area_km2, suitable_area_km2, zone_pct) 
+
+kable(eez_table,
+      col.names = c("EEZ Region",
+                    "EEZ total area (km^2)",
+                    "Suitable aquaculture area (km^2)",
+                    "% of suitable area per zone"),
+      caption = "Percentage of suitable oyster aquaculture sites per EEZ",
+      digits = 2) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = FALSE, position = "center", html_font='times new roman')
   
-  tm_scale_bar(position = c(0.06, 0.04)) + # scale bar and compass 
-  tm_compass(position = c(0.03, 0.12),
-             size = 1.5) 
+```
+
+## Function to input other species 
+
+The following code takes the analysis above and turns it into a function that allows for other species's depth and temperature specifications to find suitable aquaculture sites. Additionally, the function produces a map and a table to better visualize the results. 
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+
+# ----- Aquaculture function 
+aqua_fun <- function(depth_low, depth_high, temp_low, temp_high, species_name){
+  
+  # reclassification matrices
+  rcl_depth <- matrix(c(-Inf, depth_low, 0,  
+                      depth_low, depth_high, 1, # suitable range
+                      depth_low, Inf, 0),    
+                    ncol = 3, byrow = TRUE)
+  rcl_sst <- matrix(c(-Inf,temp_low, 0,
+                      temp_low, temp_high, 1, # suitable range
+                      temp_high, Inf, 0),
+                    ncol = 3, byrow = TRUE)
+  # reclassify depth and temp rasters 
+  aqua_depth <- terra::classify(depth_rs, rcl = rcl_depth)
+  aqua_sst <- terra::classify(sst_c, rcl = rcl_sst)
+  
+  # raster stack 
+  aqua_stack <- c(aqua_depth, aqua_sst)
+  
+  # suitable locations  
+  suitable_aqua <- terra::lapp(aqua_stack, fun = function(depth, sst) depth * sst)
+
+  # Turn 0 values into NA 
+  suitable_aqua[suitable_aqua == 0] <- NA
+  
+  # Rasterize the eez dataframe using the 'rgn' column
+  eez_rast <- terra::rasterize(eez, suitable_aqua, field = "rgn")
+
+  # Create dataframe that displays suitable area of each zone
+  suitable_area <- terra::expanse(suitable_aqua, unit = "km", zones = eez_rast)
+
+  # Rename columns
+  suitable_area <- suitable_area %>% 
+    rename("suitable_area_km2" = "area", "rgn" = "zone")
+
+  # Calculate percent of each zone that contains suitable area for oyster aquaculture 
+  eez_aqua <- eez %>% 
+    left_join(suitable_area, by= "rgn") %>% 
+    mutate(zone_pct = suitable_area_km2 / area_km2 * 100)
+  
+  # Map for aquaculture sites of species 
+aqua_map <- basemap + tm_shape(eez_aqua) +  # eez zones 
+  tm_polygons(col = "zone_pct",
+              palette = "Oranges", 
+              alpha = 0.5,
+              title = "% of suitable area \nper EEZ (km2)") + 
+  tm_shape(suitable_aqua) + # suitable area
+  tm_raster(palette = "firebrick", legend.show = FALSE) +
+  tm_add_legend(type = "fill", 
+                title = "Total suitable area (km^2)", 
+                col = "firebrick", 
+                labels = " ") +
+  tm_layout(legend.outside = TRUE,
+            fontfamily = "serif",
+            main.title = paste(species_name,"Aquaculture \nSuitable Sites"))
+
+  # table 
+  eez_table <- eez_aqua %>% # Filter data for table 
+    st_drop_geometry() %>% 
+    dplyr::select(rgn, area_km2, suitable_area_km2, zone_pct)
+  
+   eez_table_html <- kable(eez_table,
+        col.names = c("EEZ Region",
+                      "EEZ total area (km^2)",
+                      "Suitable aquaculture area (km^2)",
+                      "% of suitable area per zone"),
+        caption = paste("Percentage of suitable ", species_name, " aquaculture sites per EEZ"),
+        digits = 2) %>% 
+    kable_styling(bootstrap_options = "striped", full_width = FALSE, position = "center", html_font='times new roman')
+
+  print(aqua_map)  
+  eez_table_html  
+}
+
 ```
 
 
+Now, I will use the function to plug in the depth and temperature specifications for sugar kelp 
 
-- Change color palette of the zones 
-- Label each zone instead of legend 
+- sea surface temperature: 10-15°C
+- depth: 0-30 meters below sea level
 
+```{r}
+aqua_fun(depth_low = -30, depth_high = 0, temp_low = 10, temp_high = 15, species_name = "Sugar Kelp")
+```
+
+
+The map and table show that there are very little sites along the west coast that have the right conditions to grow sugar kelp. Sugar kelp needs very cold water to thrive. 
+
+White Seabass  
+- 8 - 24 degrees Celsius and occupy the water column from 
+- 0 - 122 meters beneath the surface 
+
+```{r}
+aqua_fun(depth_low = -122, depth_high = 0, temp_low = 8, temp_high = 24, species_name = "White Seabass")
+```
 
 
 ## Citations
