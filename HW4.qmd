@@ -2,6 +2,7 @@
 title: "Homework Assignment 4"
 subtitle: "Prioritizing potential aquaculture" 
 date: last-modified
+author: "Jordan Sibley"
 execute: 
   eval: true
   message: false
@@ -135,7 +136,7 @@ map2 <- tm_shape(depth_range) +
   tm_raster() + 
   tm_layout(title = "Post-crop")
 
-tmap_arrange(map1, map2, nrow = 1)
+#tmap_arrange(map1, map2, nrow = 1)
 
 # ---- Resolution 
 # Check if resolution of depth and sst match 
@@ -234,7 +235,7 @@ eez_oyster <- eez %>%
 bbox_depth <- as.matrix(terra::ext(depth_range))
 
 basemap <- tm_shape(depth_range) + # depth raster to show borders 
-  tm_raster(palette = "-GnBu", midpoint = NA, alpha = 0.4, legend.show = FALSE) +
+  tm_raster(palette = "-GnBu", midpoint = NA, alpha = 0.45, legend.show = TRUE, title = "Elevation (m)") +
 tm_shape(west_coast_states, bbox = bbox_depth) + # state outlines 
   tm_borders(alpha = 0.5) + 
   
@@ -282,6 +283,9 @@ kable(eez_table,
   kable_styling(bootstrap_options = "striped", full_width = FALSE, position = "center", html_font='times new roman')
   
 ```
+
+The map and the table above show the total area per EEZ. The EEZ with the greatest suitable area is Washington with 3.56 % while the EEZ with the lowest suitable area is Northern California with only 0.11%. All of the potential sites are very along the coast where the water depth is equal to or higher then 70 meters. 
+
 
 ## Function to input other species 
 
@@ -377,17 +381,7 @@ Now, I will use the function to plug in the depth and temperature specifications
 aqua_fun(depth_low = -30, depth_high = 0, temp_low = 10, temp_high = 15, species_name = "Sugar Kelp")
 ```
 
-
-The map and table show that there are very little sites along the west coast that have the right conditions to grow sugar kelp. Sugar kelp needs very cold water to thrive. 
-
-White Seabass  
-- 8 - 24 degrees Celsius and occupy the water column from 
-- 0 - 122 meters beneath the surface 
-
-```{r}
-aqua_fun(depth_low = -122, depth_high = 0, temp_low = 8, temp_high = 24, species_name = "White Seabass")
-```
-
+Similarly to the oyster results, the EEZ with the most suitable sites for sugar kelp is Washington with 3.31% while the EEZ with the least amount of suitable sites is Southern California with 0.20%. Since suagr kelp grows in a very narrow temperature range, it makes sense that the majority of the sites are found up in Washington where the water is typically colder than the California waters. 
 
 ## Citations
 
