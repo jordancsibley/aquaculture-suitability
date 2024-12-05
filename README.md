@@ -20,8 +20,8 @@ This project identifies potential aquaculture sites for oysters and sugar kelp a
 EDS223-HW4
 │   README.md
 │   .gitignore
-│   HW4.qmd
-|   HW4.html
+│   aquaculture-suitability.qmd
+|   aquaculture-suitability.html
 │   EDS223-HW4.Rproj    
 │
 └───data
